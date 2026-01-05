@@ -15,6 +15,7 @@ import wave
 import tempfile
 from pathlib import Path
 import time
+from datetime import datetime
 from dotenv import load_dotenv
 from contextlib import contextmanager
 import warnings
@@ -746,6 +747,12 @@ Remember: You're not just providing information - you're having a real conversat
             # Build messages with system prompt
             system_prompt = self.system_prompt
 
+            # Add current date/time context (only on first iteration)
+            if iteration == 1:
+                now = datetime.now()
+                current_datetime = now.strftime("%A, %B %d, %Y at %I:%M %p")
+                system_prompt += f"\n\nCurrent Date & Time:\nToday is {current_datetime}"
+
             # Add Google Workspace email context if MCP is enabled
             if self.mcp_enabled and self.user_email:
                 system_prompt += f"\n\nGoogle Workspace Context:\nThe user's email address is: {self.user_email}\nWhen using Gmail, Calendar, Drive, Docs, Sheets, or other Google Workspace tools, ALWAYS use this email address. Never ask the user for their email - you already know it."
@@ -871,6 +878,12 @@ Remember: You're not just providing information - you're having a real conversat
 
             # Build messages with system prompt
             system_prompt = self.system_prompt
+
+            # Add current date/time context (only on first iteration)
+            if iteration == 1:
+                now = datetime.now()
+                current_datetime = now.strftime("%A, %B %d, %Y at %I:%M %p")
+                system_prompt += f"\n\nCurrent Date & Time:\nToday is {current_datetime}"
 
             # Add Google Workspace email context if MCP is enabled
             if self.mcp_enabled and self.user_email:
