@@ -46,18 +46,21 @@
         }
 
         .shadow-blob {
-            background: radial-gradient(circle at 50% 50%,
-                rgba(255, 218, 224, 1) 0%,
-                rgba(255, 192, 203, 0.98) 20%,
-                rgba(255, 182, 193, 0.95) 40%,
-                rgba(255, 192, 203, 0.9) 60%,
-                rgba(255, 182, 193, 0.85) 80%,
-                rgba(255, 192, 203, 0.7) 100%
+            background: linear-gradient(135deg,
+                rgba(255, 182, 193, 0.9) 0%,
+                rgba(255, 192, 203, 0.95) 25%,
+                rgba(255, 218, 224, 0.85) 50%,
+                rgba(255, 182, 193, 0.9) 75%,
+                rgba(255, 192, 203, 0.95) 100%
             );
             background-size: 400% 400%;
             width: 100%;
             height: 100%;
             border-radius: 50%;
+            mask-image: url('https://framerusercontent.com/images/ceBGguIpUU8luwByxuQz79t7To.png');
+            mask-size: cover;
+            mask-repeat: no-repeat;
+            mask-position: center;
             animation:
                 gradientShift 8s ease infinite,
                 float 6s ease-in-out infinite,
