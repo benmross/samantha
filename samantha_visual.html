@@ -32,32 +32,32 @@
 
         .ethereal-shadow {
             position: relative;
-            width: 600px;
-            height: 600px;
+            width: 500px;
+            height: 500px;
+            border-radius: 50%;
             overflow: hidden;
         }
 
         .shadow-core {
             position: absolute;
             inset: -40px;
-            filter: blur(8px);
+            filter: blur(12px);
+            border-radius: 50%;
         }
 
         .shadow-blob {
-            background: linear-gradient(135deg,
-                rgba(255, 182, 193, 0.9) 0%,
-                rgba(255, 192, 203, 0.95) 25%,
-                rgba(255, 218, 224, 0.85) 50%,
-                rgba(255, 182, 193, 0.9) 75%,
-                rgba(255, 192, 203, 0.95) 100%
+            background: radial-gradient(circle at 50% 50%,
+                rgba(255, 218, 224, 1) 0%,
+                rgba(255, 192, 203, 0.98) 20%,
+                rgba(255, 182, 193, 0.95) 40%,
+                rgba(255, 192, 203, 0.9) 60%,
+                rgba(255, 182, 193, 0.85) 80%,
+                rgba(255, 192, 203, 0.7) 100%
             );
             background-size: 400% 400%;
             width: 100%;
             height: 100%;
-            mask-image: url('https://framerusercontent.com/images/ceBGguIpUU8luwByxuQz79t7To.png');
-            mask-size: cover;
-            mask-repeat: no-repeat;
-            mask-position: center;
+            border-radius: 50%;
             animation:
                 gradientShift 8s ease infinite,
                 float 6s ease-in-out infinite,
@@ -88,6 +88,31 @@
             opacity: 0.15;
             pointer-events: none;
             mix-blend-mode: overlay;
+            border-radius: 50%;
+        }
+
+        .orb-glow {
+            position: absolute;
+            inset: -60px;
+            border-radius: 50%;
+            background: radial-gradient(circle at 50% 50%,
+                rgba(255, 192, 203, 0.4) 0%,
+                rgba(255, 182, 193, 0.2) 40%,
+                transparent 70%
+            );
+            animation: glowPulse 4s ease-in-out infinite;
+            pointer-events: none;
+        }
+
+        @keyframes glowPulse {
+            0%, 100% {
+                opacity: 0.6;
+                transform: scale(1);
+            }
+            50% {
+                opacity: 1;
+                transform: scale(1.1);
+            }
         }
 
         .content {
@@ -197,11 +222,23 @@
             }
         }
 
+        .inner-core {
+            position: absolute;
+            inset: 80px;
+            border-radius: 50%;
+            background: radial-gradient(circle at 40% 40%,
+                rgba(255, 255, 255, 0.3) 0%,
+                rgba(255, 255, 255, 0.1) 30%,
+                transparent 60%
+            );
+            pointer-events: none;
+        }
+
         /* Responsive */
         @media (max-width: 768px) {
             .ethereal-shadow {
-                width: 400px;
-                height: 400px;
+                width: 350px;
+                height: 350px;
             }
 
             .title {
@@ -219,9 +256,11 @@
         <div class="particles" id="particles"></div>
 
         <div class="ethereal-shadow">
+            <div class="orb-glow"></div>
             <div class="shadow-core">
                 <div class="shadow-blob"></div>
             </div>
+            <div class="inner-core"></div>
             <div class="noise-overlay"></div>
 
             <div class="content">
