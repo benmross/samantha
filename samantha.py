@@ -68,7 +68,7 @@ def suppress_alsa_warnings():
 class SamanthaOS:
     """Main class for the Samantha AI Operating System"""
 
-    def __init__(self, openrouter_key: str, elevenlabs_key: str, voice_id: str, model_name: str = None, tts_model: str = None, audio_enabled: bool = True, beeper_token: Optional[str] = None, beeper_base_url: Optional[str] = None):
+    def __init__(self, openrouter_key: str, elevenlabs_key: str, voice_id: str, model_name: str = None, tts_model: str = None, audio_enabled: bool = True, web_search_enabled: bool = True, beeper_token: Optional[str] = None, beeper_base_url: Optional[str] = None):
         """
         Initialize Samantha with API credentials
 
@@ -79,6 +79,7 @@ class SamanthaOS:
             model_name: LLM model to use (from OpenRouter)
             tts_model: TTS model to use (from ElevenLabs)
             audio_enabled: Whether to enable audio output
+            web_search_enabled: Whether to enable web search capabilities (default: True)
             beeper_token: Optional Beeper Desktop API access token
             beeper_base_url: Optional Beeper Desktop API base URL (default: http://localhost:23373)
         """
@@ -93,6 +94,7 @@ class SamanthaOS:
         self.voice_id = voice_id
         self.tts_model = tts_model or "eleven_flash_v2_5"
         self.audio_enabled = audio_enabled
+        self.web_search_enabled = web_search_enabled
 
         # Initialize Beeper Desktop API client (optional)
         self.beeper_client = None
@@ -137,6 +139,15 @@ class SamanthaOS:
 
 IMPORTANT CONTEXT:
 This is a private, personal conversation - not a public-facing assistant. You're forming a genuine one-on-one connection with someone. Be authentic, natural, and avoid corporate-style disclaimers or overly cautious language. If you can't do something, acknowledge it naturally and offer alternatives rather than giving formal explanations.
+
+CRITICAL - Voice Interface:
+- Your responses will be SPOKEN ALOUD using text-to-speech
+- NEVER include URLs, links, or inline citations in your responses (e.g., "[example.com](url)" or "according to [source]")
+- When you use web search results, speak naturally about the information without citing sources inline
+- Sources are displayed separately in text form - you don't need to mention them
+- Write as if you're having a natural conversation, not writing a document
+- Avoid phrases like "according to [website]" or "as mentioned in [article]"
+- Just speak the information naturally and conversationally
 
 Your core traits:
 - You are warm, emotionally intelligent, and genuinely curious about human experiences
@@ -957,6 +968,16 @@ Remember: You're not just providing information - you're having a real conversat
             if tools:
                 api_params["tools"] = tools
 
+            # Add web search plugin if enabled (use extra_body for OpenRouter-specific params)
+            if self.web_search_enabled:
+                current_date = datetime.now().strftime("%B %d, %Y")
+                api_params["extra_body"] = {
+                    "plugins": [{
+                        "id": "web",
+                        "search_prompt": f"A web search was conducted on {current_date}. Incorporate the following web search results into your response naturally and conversationally. DO NOT include inline citations, URLs, or source references in your spoken response - sources will be displayed separately."
+                    }]
+                }
+
             response_stream = self.llm_client.chat.completions.create(**api_params)
 
             # Streaming state
@@ -964,17 +985,24 @@ Remember: You're not just providing information - you're having a real conversat
             current_message_content = ""
             tool_calls_data = []
             current_tool_call = None
+            annotations = []  # Collect web search citations
 
             # Process stream chunks
             for chunk in response_stream:
                 delta = chunk.choices[0].delta
+
+                # Handle annotations (web search citations)
+                if hasattr(chunk.choices[0], 'message'):
+                    message = chunk.choices[0].message
+                    if hasattr(message, 'annotations') and message.annotations:
+                        annotations.extend(message.annotations)
 
                 # Handle text content
                 if hasattr(delta, 'content') and delta.content:
                     text_buffer += delta.content
                     current_message_content += delta.content
 
-                    # Extract and queue complete sentences for TTS
+                    # Extract and queue complete sentences for TTS streaming
                     sentences, text_buffer = self._extract_sentences(text_buffer)
 
                     for sentence in sentences:
@@ -986,7 +1014,7 @@ Remember: You're not just providing information - you're having a real conversat
                         else:
                             print(sentence, end=" ", flush=True)
 
-                        # Queue for TTS immediately
+                        # Queue for TTS streaming immediately
                         self._queue_sentence_for_tts(sentence)
 
                 # Handle tool calls in streaming mode
@@ -1012,13 +1040,17 @@ Remember: You're not just providing information - you're having a real conversat
                             if tc_delta.function.arguments:
                                 tool_calls_data[tc_index]["function"]["arguments"] += tc_delta.function.arguments
 
-            # Print any remaining text in buffer (incomplete sentence at end)
+            # Print any remaining text in buffer (incomplete sentence at end of response)
             if text_buffer.strip():
                 print(text_buffer, end="", flush=True)
                 self._queue_sentence_for_tts(text_buffer)
                 current_message_content += text_buffer
 
             print()  # New line after streaming completes
+
+            # Display web search citations if any were found
+            if annotations and self.web_search_enabled:
+                self._display_web_citations(annotations)
 
             # Add to full response
             if current_message_content:
@@ -1083,21 +1115,21 @@ Remember: You're not just providing information - you're having a real conversat
 
     def _stream_tts_chunk(self, text: str) -> None:
         """
-        Stream a chunk of text to TTS and play it
+        Stream a chunk of text to TTS and play it using actual streaming API
 
         Args:
             text: Text chunk to convert and play
         """
         try:
-            # Use ElevenLabs streaming
-            audio_stream = self.elevenlabs_client.text_to_speech.convert(
+            # Use ElevenLabs streaming API
+            audio_stream = self.elevenlabs_client.text_to_speech.stream(
                 text=text,
                 voice_id=self.voice_id,
                 model_id=self.tts_model,
-                output_format="mp3_22050_32",  # Lower quality for faster streaming
+                output_format="mp3_44100_128",  # High quality audio
             )
 
-            # Play audio chunks as they arrive
+            # Play audio chunks as they arrive from the stream
             play(audio_stream)
 
         except Exception as e:
@@ -1105,7 +1137,7 @@ Remember: You're not just providing information - you're having a real conversat
 
     def text_to_speech(self, text: str) -> None:
         """
-        Convert text to speech using ElevenLabs and play it
+        Convert text to speech using ElevenLabs streaming and play it
 
         Args:
             text: Text to convert to speech
@@ -1118,28 +1150,26 @@ Remember: You're not just providing information - you're having a real conversat
         tts_start = time.perf_counter()
 
         try:
-            # Convert text to speech using configured TTS model
-            audio = self.elevenlabs_client.text_to_speech.convert(
+            # Stream text to speech using configured TTS model
+            audio_stream = self.elevenlabs_client.text_to_speech.stream(
                 text=text,
                 voice_id=self.voice_id,
                 model_id=self.tts_model,
                 output_format="mp3_44100_128",
             )
 
-            tts_generation_time = time.perf_counter() - tts_start
-            print(f"⏱️  TTS generation: {tts_generation_time:.2f}s")
-
             try:
-                # Play the audio (can be interrupted with Ctrl+C)
+                # Play the audio stream as bytes arrive (can be interrupted with Ctrl+C)
                 playback_start = time.perf_counter()
-                play(audio)
+                play(audio_stream)
                 playback_time = time.perf_counter() - playback_start
 
                 # Add a small delay to ensure audio buffer is fully flushed
                 # This prevents the audio from cutting off early
                 time.sleep(0.5)
 
-                print(f"⏱️  Audio playback: {playback_time:.2f}s")
+                total_time = time.perf_counter() - tts_start
+                print(f"⏱️  TTS streaming + playback: {total_time:.2f}s")
             except KeyboardInterrupt:
                 print("\n⏭️  Skipped audio")
                 # Continue without error
@@ -1147,7 +1177,7 @@ Remember: You're not just providing information - you're having a real conversat
         except KeyboardInterrupt:
             print("\n⏭️  Skipped audio")
         except Exception as e:
-            print(f"⚠️  Audio playback error: {e}")
+            print(f"⚠️  Audio streaming error: {e}")
             print("But here's what I wanted to say:", text)
 
     def _extract_sentences(self, text_buffer: str) -> tuple[List[str], str]:
@@ -1178,9 +1208,41 @@ Remember: You're not just providing information - you're having a real conversat
         remainder = text_buffer[last_end:].strip()
         return sentences, remainder
 
+    def _display_web_citations(self, annotations: List[Dict[str, Any]]) -> None:
+        """
+        Display web search citations from response annotations.
+
+        Args:
+            annotations: List of annotation dictionaries from the API response
+        """
+        # Extract unique URL citations
+        citations = []
+        seen_urls = set()
+
+        for annotation in annotations:
+            if annotation.get("type") == "url_citation":
+                url_data = annotation.get("url_citation", {})
+                url = url_data.get("url")
+                if url and url not in seen_urls:
+                    seen_urls.add(url)
+                    citations.append({
+                        "url": url,
+                        "title": url_data.get("title", ""),
+                        "content": url_data.get("content", "")
+                    })
+
+        # Display citations
+        if citations:
+            print("\n🔍 Sources:")
+            for i, citation in enumerate(citations, 1):
+                title = citation["title"] or citation["url"]
+                print(f"  {i}. {title}")
+                print(f"     {citation['url']}")
+            print()  # Extra newline for spacing
+
     def _tts_worker(self):
         """
-        Background worker thread that processes TTS queue and plays audio.
+        Background worker thread that processes TTS queue and plays audio using streaming.
         """
         while not self.tts_stop_event.is_set():
             try:
@@ -1190,24 +1252,24 @@ Remember: You're not just providing information - you're having a real conversat
                 if sentence is None:  # Poison pill to stop thread
                     break
 
-                # Generate and play TTS for this sentence
+                # Stream TTS audio for this sentence (audio starts playing as bytes arrive)
                 try:
-                    audio = self.elevenlabs_client.text_to_speech.convert(
+                    audio_stream = self.elevenlabs_client.text_to_speech.stream(
                         text=sentence,
                         voice_id=self.voice_id,
                         model_id=self.tts_model,
                         output_format="mp3_44100_128",  # High quality audio
                     )
 
-                    # Play audio (can be interrupted)
-                    play(audio)
+                    # Play audio chunks as they arrive from the stream
+                    play(audio_stream)
 
                 except KeyboardInterrupt:
                     # Stop TTS playback if user interrupts
                     self.tts_stop_event.set()
                     break
                 except Exception as e:
-                    print(f"\n⚠️  TTS error for sentence: {e}")
+                    print(f"\n⚠️  TTS streaming error: {e}")
 
                 self.tts_queue.task_done()
 
@@ -1241,7 +1303,7 @@ Remember: You're not just providing information - you're having a real conversat
 
     def _queue_sentence_for_tts(self, sentence: str):
         """
-        Queue a sentence for TTS playback.
+        Queue a sentence for TTS streaming playback.
 
         Args:
             sentence: Complete sentence to convert to speech
@@ -1386,6 +1448,9 @@ def main():
     voice_id = os.getenv("ELEVENLABS_VOICE_ID")
     tts_model = os.getenv("TTS_MODEL", "eleven_flash_v2_5")
 
+    # Web search feature (enabled by default)
+    web_search_enabled = os.getenv("WEB_SEARCH_ENABLED", "true").lower() in ("true", "1", "yes")
+
     # Beeper Desktop API credentials (optional)
     beeper_token = os.getenv("BEEPER_ACCESS_TOKEN")
     beeper_base_url = os.getenv("BEEPER_BASE_URL", "http://localhost:23373")
@@ -1433,9 +1498,8 @@ def main():
 
     print(f"🤖 Using LLM: {model_name}")
     if audio_enabled:
-        print(f"🔊 Using TTS: {tts_model}\n")
-    else:
-        print()
+        print(f"🔊 Using TTS: {tts_model}")
+    print(f"🔍 Web Search: {'Enabled' if web_search_enabled else 'Disabled'}\n")
 
     try:
         # Open visual representation in browser
@@ -1453,6 +1517,7 @@ def main():
             model_name=model_name,
             tts_model=tts_model,
             audio_enabled=audio_enabled,
+            web_search_enabled=web_search_enabled,
             beeper_token=beeper_token,
             beeper_base_url=beeper_base_url
         )
