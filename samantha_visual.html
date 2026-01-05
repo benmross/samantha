@@ -12,7 +12,7 @@
         }
 
         body {
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            background: #d56453;
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -94,29 +94,6 @@
             border-radius: 50%;
         }
 
-        .orb-glow {
-            position: absolute;
-            inset: -60px;
-            border-radius: 50%;
-            background: radial-gradient(circle at 50% 50%,
-                rgba(255, 192, 203, 0.4) 0%,
-                rgba(255, 182, 193, 0.2) 40%,
-                transparent 70%
-            );
-            animation: glowPulse 4s ease-in-out infinite;
-            pointer-events: none;
-        }
-
-        @keyframes glowPulse {
-            0%, 100% {
-                opacity: 0.6;
-                transform: scale(1);
-            }
-            50% {
-                opacity: 1;
-                transform: scale(1.1);
-            }
-        }
 
         .content {
             position: absolute;
@@ -225,17 +202,6 @@
             }
         }
 
-        .inner-core {
-            position: absolute;
-            inset: 80px;
-            border-radius: 50%;
-            background: radial-gradient(circle at 40% 40%,
-                rgba(255, 255, 255, 0.3) 0%,
-                rgba(255, 255, 255, 0.1) 30%,
-                transparent 60%
-            );
-            pointer-events: none;
-        }
 
         /* Responsive */
         @media (max-width: 768px) {
@@ -259,11 +225,9 @@
         <div class="particles" id="particles"></div>
 
         <div class="ethereal-shadow">
-            <div class="orb-glow"></div>
             <div class="shadow-core">
                 <div class="shadow-blob"></div>
             </div>
-            <div class="inner-core"></div>
             <div class="noise-overlay"></div>
 
             <div class="content">
