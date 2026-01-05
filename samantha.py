@@ -380,6 +380,31 @@ Remember: You're not just providing information - you're having a real conversat
                         "required": ["query"]
                     }
                 }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "beeper_send_message",
+                    "description": "Send a message to a Beeper chat (WhatsApp, Telegram, etc.). Use this when the user asks you to send a message to someone. You must know the chat_id first (use beeper_search_chats or beeper_list_chats to find it). Supports markdown formatting.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "chat_id": {
+                                "type": "string",
+                                "description": "The chat ID to send the message to (get this from beeper_search_chats or beeper_list_chats)"
+                            },
+                            "text": {
+                                "type": "string",
+                                "description": "The message text to send. Supports markdown formatting."
+                            },
+                            "reply_to_message_id": {
+                                "type": "string",
+                                "description": "Optional: Message ID to reply to (makes this a reply to a specific message)"
+                            }
+                        },
+                        "required": ["chat_id", "text"]
+                    }
+                }
             }
         ]
 
@@ -563,6 +588,27 @@ Remember: You're not just providing information - you're having a real conversat
         except Exception as e:
             return f"Error getting messages: {str(e)}"
 
+    def _send_message(self, chat_id: str, text: str, reply_to_message_id: str = None) -> str:
+        """Send a message to a Beeper chat"""
+        try:
+            # Build parameters
+            kwargs = {"text": text}
+            if reply_to_message_id:
+                kwargs["reply_to_message_id"] = reply_to_message_id
+
+            # Send the message
+            result = self.beeper_client.messages.send(chat_id=chat_id, **kwargs)
+
+            return json.dumps({
+                "success": True,
+                "chat_id": result.chat_id,
+                "pending_message_id": result.pending_message_id,
+                "message": f"Message sent successfully to chat {chat_id}"
+            }, indent=2)
+
+        except Exception as e:
+            return f"Error sending message: {str(e)}"
+
     def execute_tool(self, tool_name: str, tool_args: Dict[str, Any]) -> str:
         """
         Execute a tool call (handles both Beeper and MCP tools)
@@ -622,6 +668,12 @@ Remember: You're not just providing information - you're having a real conversat
         elif tool_name == "beeper_get_chat_messages":
             return self._get_chat_messages(
                 chat_id=tool_args.get("chat_id")
+            )
+        elif tool_name == "beeper_send_message":
+            return self._send_message(
+                chat_id=tool_args.get("chat_id"),
+                text=tool_args.get("text"),
+                reply_to_message_id=tool_args.get("reply_to_message_id")
             )
         else:
             return f"Unknown tool: {tool_name}"
