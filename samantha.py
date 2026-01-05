@@ -24,6 +24,7 @@ from typing import Optional, List, Dict, Any
 import threading
 import queue
 import re
+import webbrowser
 
 # Load environment variables from .env file if it exists
 load_dotenv()
@@ -1437,6 +1438,13 @@ def main():
         print()
 
     try:
+        # Open visual representation in browser
+        visual_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "samantha_visual.html")
+        if os.path.exists(visual_path):
+            visual_url = f"file://{visual_path}"
+            webbrowser.open(visual_url)
+            print("🎨 Visual representation opened in browser\n")
+
         # Initialize Samantha
         samantha = SamanthaOS(
             openrouter_key,
