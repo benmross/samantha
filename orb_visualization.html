@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Samantha - AI Orb Visualization</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            color: white;
+        }
+
+        #container {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 30px;
+        }
+
+        #canvas {
+            border-radius: 50%;
+            filter: drop-shadow(0 0 30px rgba(255, 255, 255, 0.3));
+        }
+
+        #status {
+            font-size: 24px;
+            font-weight: 300;
+            text-align: center;
+            opacity: 0.9;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+            min-height: 30px;
+        }
+
+        #connection-status {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            font-size: 14px;
+            backdrop-filter: blur(10px);
+        }
+
+        .connected {
+            color: #4ade80;
+        }
+
+        .disconnected {
+            color: #f87171;
+        }
+
+        .dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 8px;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        .connected .dot {
+            background: #4ade80;
+        }
+
+        .disconnected .dot {
+            background: #f87171;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        #controls {
+            position: absolute;
+            bottom: 30px;
+            display: flex;
+            gap: 15px;
+        }
+
+        button {
+            padding: 12px 24px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 25px;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+        }
+
+        button:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+    </style>
+</head>
+<body>
+    <div id="connection-status" class="disconnected">
+        <span class="dot"></span>
+        <span id="status-text">Disconnected</span>
+    </div>
+
+    <div id="container">
+        <canvas id="canvas" width="400" height="400"></canvas>
+        <div id="status">Waiting for Samantha...</div>
+    </div>
+
+    <div id="controls">
+        <button id="mic-toggle">Enable Microphone</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const statusText = document.getElementById('status');
+        const connectionStatus = document.getElementById('connection-status');
+        const statusTextElem = document.getElementById('status-text');
+        const micToggle = document.getElementById('mic-toggle');
+
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        const baseRadius = 80;
+
+        let ws = null;
+        let micEnabled = false;
+        let audioContext = null;
+        let analyser = null;
+        let microphone = null;
+        let dataArray = null;
+
+        // Orb state
+        let state = 'idle'; // idle, thinking, listening, speaking
+        let audioLevel = 0;
+        let targetAudioLevel = 0;
+        let pulsePhase = 0;
+
+        // Color schemes for different states
+        const colors = {
+            idle: { r: 147, g: 51, b: 234 },      // Purple
+            thinking: { r: 59, g: 130, b: 246 },  // Blue
+            listening: { r: 34, g: 197, b: 94 },  // Green
+            speaking: { r: 236, g: 72, b: 153 }   // Pink
+        };
+
+        let currentColor = colors.idle;
+        let targetColor = colors.idle;
+
+        // WebSocket connection
+        function connectWebSocket() {
+            ws = new WebSocket('ws://localhost:8765');
+
+            ws.onopen = () => {
+                console.log('Connected to Samantha');
+                connectionStatus.className = 'connected';
+                statusTextElem.textContent = 'Connected';
+                statusText.textContent = 'Ready';
+            };
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                handleStateChange(data);
+            };
+
+            ws.onclose = () => {
+                console.log('Disconnected from Samantha');
+                connectionStatus.className = 'disconnected';
+                statusTextElem.textContent = 'Disconnected';
+                statusText.textContent = 'Connection lost';
+
+                // Attempt to reconnect after 3 seconds
+                setTimeout(connectWebSocket, 3000);
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+            };
+        }
+
+        // Handle state changes from Samantha
+        function handleStateChange(data) {
+            if (data.state) {
+                state = data.state;
+                targetColor = colors[state] || colors.idle;
+            }
+
+            if (data.message) {
+                statusText.textContent = data.message;
+            }
+
+            if (data.audioLevel !== undefined) {
+                targetAudioLevel = data.audioLevel;
+            }
+        }
+
+        // Microphone setup
+        async function enableMicrophone() {
+            if (micEnabled) {
+                // Disable microphone
+                if (microphone) {
+                    microphone.disconnect();
+                    microphone = null;
+                }
+                if (audioContext) {
+                    audioContext.close();
+                    audioContext = null;
+                }
+                micEnabled = false;
+                micToggle.textContent = 'Enable Microphone';
+                return;
+            }
+
+            try {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 256;
+                const bufferLength = analyser.frequencyBinCount;
+                dataArray = new Uint8Array(bufferLength);
+
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                microphone = audioContext.createMediaStreamSource(stream);
+                microphone.connect(analyser);
+
+                micEnabled = true;
+                micToggle.textContent = 'Disable Microphone';
+            } catch (err) {
+                console.error('Error accessing microphone:', err);
+                alert('Could not access microphone. Please grant permission.');
+            }
+        }
+
+        micToggle.addEventListener('click', enableMicrophone);
+
+        // Get audio level from microphone
+        function getMicLevel() {
+            if (!analyser || !dataArray) return 0;
+
+            analyser.getByteFrequencyData(dataArray);
+
+            // Calculate average volume
+            let sum = 0;
+            for (let i = 0; i < dataArray.length; i++) {
+                sum += dataArray[i];
+            }
+            return sum / dataArray.length / 255; // Normalize to 0-1
+        }
+
+        // Smooth color transitions
+        function lerpColor(current, target, factor) {
+            return {
+                r: current.r + (target.r - current.r) * factor,
+                g: current.g + (target.g - current.g) * factor,
+                b: current.b + (target.b - current.b) * factor
+            };
+        }
+
+        // Draw the orb
+        function drawOrb() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Update audio level based on state
+            if (state === 'listening' && micEnabled) {
+                targetAudioLevel = getMicLevel();
+            }
+
+            // Smooth audio level transitions
+            audioLevel += (targetAudioLevel - audioLevel) * 0.2;
+
+            // Smooth color transitions
+            currentColor = lerpColor(currentColor, targetColor, 0.1);
+
+            // Calculate radius based on state and audio
+            let radius = baseRadius;
+
+            if (state === 'thinking') {
+                // Gentle pulsing for thinking
+                pulsePhase += 0.02;
+                radius = baseRadius + Math.sin(pulsePhase) * 10;
+            } else if (state === 'listening' || state === 'speaking') {
+                // React to audio
+                radius = baseRadius + audioLevel * 40;
+                pulsePhase += 0.05;
+                radius += Math.sin(pulsePhase) * 5;
+            } else {
+                // Idle - very gentle pulse
+                pulsePhase += 0.01;
+                radius = baseRadius + Math.sin(pulsePhase) * 5;
+            }
+
+            // Draw outer glow
+            const gradient = ctx.createRadialGradient(
+                centerX, centerY, radius * 0.3,
+                centerX, centerY, radius * 1.5
+            );
+
+            const { r, g, b } = currentColor;
+            gradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, 0.8)`);
+            gradient.addColorStop(0.5, `rgba(${r}, ${g}, ${b}, 0.3)`);
+            gradient.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`);
+
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius * 1.5, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Draw main orb with audio reactivity
+            for (let i = 0; i < 3; i++) {
+                const orbGradient = ctx.createRadialGradient(
+                    centerX - radius * 0.3, centerY - radius * 0.3, 0,
+                    centerX, centerY, radius
+                );
+
+                const alpha = 1 - (i * 0.2);
+                orbGradient.addColorStop(0, `rgba(${r + 40}, ${g + 40}, ${b + 40}, ${alpha})`);
+                orbGradient.addColorStop(0.7, `rgba(${r}, ${g}, ${b}, ${alpha})`);
+                orbGradient.addColorStop(1, `rgba(${r - 30}, ${g - 30}, ${b - 30}, ${alpha * 0.6})`);
+
+                ctx.fillStyle = orbGradient;
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, radius - (i * 5), 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Audio level decay
+            targetAudioLevel *= 0.95;
+
+            requestAnimationFrame(drawOrb);
+        }
+
+        // Start animation
+        drawOrb();
+
+        // Connect to WebSocket
+        connectWebSocket();
+    </script>
+</body>
+</html>

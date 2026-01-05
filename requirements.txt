@@ -1,0 +1,6 @@
+openai>=1.0.0
+elevenlabs>=1.13.0
+pyaudio>=0.2.14
+python-dotenv>=1.0.0
+beeper_desktop_api>=1.0.0
+mcp>=1.0.0
